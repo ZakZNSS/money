@@ -1,0 +1,8 @@
+# Dev-only files (local server and icon build) — not needed on GitHub Pages
+server.ps1
+make-icons.ps1
+scan-me.png
+
+# Personal data — never push to a public repo
+my-data.json
+*.private.json
