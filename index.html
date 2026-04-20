@@ -252,6 +252,19 @@ header .date {
   flex-shrink: 0;
   background: var(--text-faint);
 }
+.row .dot-tap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  margin: -8px -4px -8px -8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.row .dot-tap:hover { background: rgba(255,255,255,0.06); }
+.row .dot-tap:active { transform: scale(0.9); }
 .row.paid .dot { background: var(--accent); }
 .row.due .dot { background: var(--warn); box-shadow: 0 0 0 4px var(--warn-glow); }
 .row.overdue .dot { background: var(--danger); box-shadow: 0 0 0 4px var(--danger-glow); }
@@ -1454,8 +1467,8 @@ function renderBills() {
       const n = paymentIndex(b) + 1;
       meta += ` <span class="pill" style="color:var(--info)">${n}/${b.totalMonths}</span>`;
     }
-    return `<div class="row ${cls}" onclick="toggleBillPaid('${b.id}')">
-      <div class="dot"></div>
+    return `<div class="row ${cls}" onclick="openModal('bill', ${JSON.stringify(b).replace(/"/g,'&quot;')})">
+      <div class="dot-tap" onclick="event.stopPropagation();toggleBillPaid('${b.id}')" title="${b.paid?'Mark unpaid':'Mark paid'}"><div class="dot"></div></div>
       <div class="body">
         <div class="name">${escapeHtml(b.name)}</div>
         <div class="meta">${meta}</div>
