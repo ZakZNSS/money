@@ -1138,7 +1138,7 @@ nav button:hover { color: var(--text); }
         <div class="sub">Restore JSON</div>
       </div>
     </div>
-    <input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(event)">
+    <input type="file" id="import-file" style="display:none" onchange="importData(event)">
 
     <button class="btn-secondary" style="width:100%;margin-top:20px;padding:14px;border-radius:10px;font-weight:600;cursor:pointer;background:transparent;color:var(--danger);border:1px solid var(--danger);" onclick="clearAll()">Reset All Data</button>
     <div style="text-align:center;color:var(--text-faint);font-size:11px;margin-top:20px;">Saved locally on this device · v1.0</div>
@@ -2039,7 +2039,7 @@ function importData(ev) {
       document.getElementById('onboard').classList.remove('active');
       renderAll();
       alert('Imported!');
-    } catch(err) { alert('Invalid file'); }
+    } catch(err) { alert('That file isn\'t a valid backup.\n\nMake sure you picked a .json file exported from this app.'); }
   };
   r.readAsText(file);
 }
