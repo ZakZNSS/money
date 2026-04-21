@@ -252,19 +252,27 @@ header .date {
   flex-shrink: 0;
   background: var(--text-faint);
 }
-.row .dot-tap {
+.row .row-acts {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 8px;
-  margin: -8px -4px -8px -8px;
-  border-radius: 50%;
+  gap: 6px;
   flex-shrink: 0;
-  cursor: pointer;
-  transition: background 0.15s;
 }
-.row .dot-tap:hover { background: rgba(255,255,255,0.06); }
-.row .dot-tap:active { transform: scale(0.9); }
+.row .row-act {
+  background: rgba(255,255,255,0.06);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  white-space: nowrap;
+}
+.row .row-act:hover { background: rgba(255,255,255,0.12); }
+.row .row-act:active { transform: scale(0.95); }
+.row .row-act.move { background: var(--accent); color: #000; border-color: var(--accent); }
+.row.paid .row-act.move { background: rgba(255,255,255,0.06); color: var(--text); border-color: var(--border); }
 .row.paid .dot { background: var(--accent); }
 .row.due .dot { background: var(--warn); box-shadow: 0 0 0 4px var(--warn-glow); }
 .row.overdue .dot { background: var(--danger); box-shadow: 0 0 0 4px var(--danger-glow); }
@@ -1467,13 +1475,19 @@ function renderBills() {
       const n = paymentIndex(b) + 1;
       meta += ` <span class="pill" style="color:var(--info)">${n}/${b.totalMonths}</span>`;
     }
-    return `<div class="row ${cls}" onclick="openModal('bill', ${JSON.stringify(b).replace(/"/g,'&quot;')})">
-      <div class="dot-tap" onclick="event.stopPropagation();toggleBillPaid('${b.id}')" title="${b.paid?'Mark unpaid':'Mark paid'}"><div class="dot"></div></div>
+    const safe = JSON.stringify(b).replace(/"/g,'&quot;');
+    const moveLabel = b.paid ? '↶ Undo' : '✓ Paid';
+    return `<div class="row ${cls}" onclick="openModal('bill', ${safe})">
+      <div class="dot"></div>
       <div class="body">
         <div class="name">${escapeHtml(b.name)}</div>
         <div class="meta">${meta}</div>
       </div>
       <div class="amount">${fmt(b.amount)}</div>
+      <div class="row-acts">
+        <button class="row-act" onclick="event.stopPropagation();openModal('bill', ${safe})">Edit</button>
+        <button class="row-act move" onclick="event.stopPropagation();toggleBillPaid('${b.id}')">${moveLabel}</button>
+      </div>
     </div>`;
   }).join('');
 }
