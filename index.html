@@ -1092,16 +1092,53 @@ nav button:hover { color: var(--text); }
       <button class="chip active" data-mode="ideas"></button>
       <button class="chip" data-mode="kit"></button>
     </div>
-    <div class="todo-quick">
-      <input id="todo-input" placeholder="Add a task..." autocomplete="off">
-      <button id="todo-add-btn" onclick="addTodo()">Add</button>
-    </div>
-    <div id="todo-active"></div>
-    <div id="todo-completed-section" style="display:none">
-      <div class="todo-done-header" id="todo-done-header" onclick="toggleDoneCollapse()">
-        <span class="chev">▾</span> <span id="todo-done-count">0 done</span>
+
+    <!-- Standard todo list (used for Personal, Project, Work/Ideas) -->
+    <div id="todo-standard">
+      <div class="todo-quick">
+        <input id="todo-input" placeholder="Add a task..." autocomplete="off">
+        <button id="todo-add-btn" onclick="addTodo()">Add</button>
       </div>
-      <div id="todo-done-list"></div>
+      <div id="todo-active"></div>
+      <div id="todo-completed-section" style="display:none">
+        <div class="todo-done-header" id="todo-done-header" onclick="toggleDoneCollapse()">
+          <span class="chev">▾</span> <span id="todo-done-count">0 done</span>
+        </div>
+        <div id="todo-done-list"></div>
+      </div>
+    </div>
+
+    <!-- Kit jobs view (swaps in when Work > Shopping List) -->
+    <div id="kit-view" style="display:none">
+      <!-- Jobs list -->
+      <div id="kit-jobs-list">
+        <div class="todo-quick">
+          <input id="kit-job-input" placeholder="New job name (e.g. Wickes install)..." autocomplete="off">
+          <button onclick="addKitJob()">+ Job</button>
+        </div>
+        <div id="kit-jobs-rows"></div>
+      </div>
+      <!-- Single job detail -->
+      <div id="kit-job-detail" style="display:none">
+        <button class="btn-secondary" style="padding:6px 14px;font-size:13px;border:1px solid var(--border);background:var(--card);color:var(--text);border-radius:999px;margin-bottom:12px;cursor:pointer;" onclick="backToKitJobs()">← Jobs</button>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+          <h3 id="kit-job-title" style="flex:1;font-size:18px;font-weight:700;"></h3>
+          <button class="action" onclick="renameKitJob()" title="Rename job" style="padding:6px 10px;">✎</button>
+          <button class="action" onclick="deleteKitJob()" title="Delete job" style="padding:6px 10px;color:var(--danger);">🗑</button>
+        </div>
+        <div class="todo-quick" style="gap:6px;">
+          <input id="kit-item-qty" type="number" min="1" value="1" placeholder="Qty" style="flex:0 0 62px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 10px;color:var(--text);font-size:15px;font-family:inherit;text-align:center;">
+          <input id="kit-item-input" placeholder="Kit item (e.g. 4MP turret)..." autocomplete="off">
+          <button onclick="addKitItem()">Add</button>
+        </div>
+        <div id="kit-items-active"></div>
+        <div id="kit-items-completed-section" style="display:none">
+          <div class="todo-done-header" id="kit-items-done-header" onclick="toggleKitDoneCollapse()">
+            <span class="chev">▾</span> <span id="kit-items-done-count">0 collected</span>
+          </div>
+          <div id="kit-items-done-list"></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1283,7 +1320,30 @@ function migrate(s) {
     });
     s.seedVersion = 4;
   }
+  // v4 -> v5: migrate flat kit todos into per-job kit lists
+  if (s.seedVersion < 5) {
+    if (!s.kitJobs) s.kitJobs = [];
+    const legacy = s.todos.filter(t => t.category === 'work' && t.kit);
+    if (legacy.length) {
+      s.kitJobs.push({
+        id: id(),
+        name: 'General',
+        notes: '',
+        created: new Date().toISOString(),
+        items: legacy.map(t => ({
+          id: t.id,
+          text: t.text,
+          qty: 1,
+          done: !!t.done,
+          created: t.created || new Date().toISOString()
+        }))
+      });
+      s.todos = s.todos.filter(t => !(t.category === 'work' && t.kit));
+    }
+    s.seedVersion = 5;
+  }
   if (!s.todoLabels) s.todoLabels = {};
+  if (!s.kitJobs) s.kitJobs = [];
   return s;
 }
 
@@ -1303,9 +1363,10 @@ function seed() {
     networth: [],
     receipts: [],
     lastResetMonth: todayMonth(),
-    seedVersion: 4,
+    seedVersion: 5,
     settings: { paydayDay: 28, weekendShift: true },
     todoLabels: {},
+    kitJobs: [],
     onboarded: false
   };
 }
@@ -2271,25 +2332,28 @@ function renderTodos() {
   document.querySelectorAll('#todo-work-modes .chip').forEach(c => {
     c.textContent = todoLabel(c.dataset.mode);
   });
-  // sync placeholder, work sub-chip visibility, button label
-  const inp = document.getElementById('todo-input');
-  const plain = s => s.replace(/^\p{Extended_Pictographic}+\s*/u, '');
-  if (inp) {
-    if (todoTab === 'work' && workMode === 'kit') inp.placeholder = `Add to ${plain(todoLabel('kit'))}...`;
-    else inp.placeholder = `Add to ${plain(todoLabel(todoTab))}...`;
-  }
-  const addBtn = document.getElementById('todo-add-btn');
-  if (addBtn) addBtn.textContent = (todoTab === 'work' && workMode === 'kit') ? '+ Item' : 'Add';
   const workChips = document.getElementById('todo-work-modes');
   if (workChips) workChips.style.display = todoTab === 'work' ? 'flex' : 'none';
+
+  const isKit = todoTab === 'work' && workMode === 'kit';
+  document.getElementById('todo-standard').style.display = isKit ? 'none' : 'block';
+  document.getElementById('kit-view').style.display = isKit ? 'block' : 'none';
+
+  if (isKit) { renderKit(); return; }
+
+  // standard list mode
+  const inp = document.getElementById('todo-input');
+  const plain = s => s.replace(/^\p{Extended_Pictographic}+\s*/u, '');
+  if (inp) inp.placeholder = `Add to ${plain(todoLabel(todoTab))}...`;
+  const addBtn = document.getElementById('todo-add-btn');
+  if (addBtn) addBtn.textContent = 'Add';
 
   const scoped = filteredTodos();
   const active = scoped.filter(t => !t.done);
   const done = scoped.filter(t => t.done);
   const aEl = document.getElementById('todo-active');
   if (!active.length) {
-    const emptyLabel = (todoTab === 'work' && workMode === 'kit') ? todoLabel('kit') : todoLabel(todoTab);
-    aEl.innerHTML = `<div class="empty">Nothing in ${emptyLabel} yet.</div>`;
+    aEl.innerHTML = `<div class="empty">Nothing in ${todoLabel(todoTab)} yet.</div>`;
   } else {
     aEl.innerHTML = active.map(t => renderTodoRow(t, false)).join('');
   }
@@ -2314,6 +2378,199 @@ function renderTodoRow(t, isDone) {
       <button class="todo-del" onclick="deleteTodo('${t.id}', event)">×</button>
     </div>`;
 }
+
+// ============ KIT JOBS ============
+let activeKitJobId = null;
+let kitDoneCollapsed = true;
+
+function renderKit() {
+  const listEl = document.getElementById('kit-jobs-list');
+  const detailEl = document.getElementById('kit-job-detail');
+  const job = activeKitJobId ? (state.kitJobs || []).find(j => j.id === activeKitJobId) : null;
+  if (!job) activeKitJobId = null;
+
+  if (activeKitJobId && job) {
+    listEl.style.display = 'none';
+    detailEl.style.display = 'block';
+    renderKitJobDetail(job);
+  } else {
+    listEl.style.display = 'block';
+    detailEl.style.display = 'none';
+    renderKitJobsList();
+  }
+}
+
+function renderKitJobsList() {
+  const rows = document.getElementById('kit-jobs-rows');
+  const jobs = state.kitJobs || [];
+  if (!jobs.length) {
+    rows.innerHTML = `<div class="empty">No jobs yet. Add one above.</div>`;
+    return;
+  }
+  rows.innerHTML = jobs.map(j => {
+    const total = j.items.length;
+    const done = j.items.filter(i => i.done).length;
+    const pct = total ? Math.round(done/total * 100) : 0;
+    const complete = total > 0 && done === total;
+    return `
+      <div class="todo-row" style="flex-direction:column;align-items:stretch;gap:8px;padding:14px 16px;" onclick="openKitJob('${j.id}')">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div class="todo-text" style="font-weight:600;">${escapeHtml(j.name)}</div>
+          <span class="pill">${done}/${total}${complete ? ' ✓' : ''}</span>
+        </div>
+        <div style="height:4px;background:var(--border);border-radius:999px;overflow:hidden;">
+          <div style="height:100%;width:${pct}%;background:${complete?'var(--accent)':'var(--info)'};transition:width 0.3s;"></div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function renderKitJobDetail(job) {
+  document.getElementById('kit-job-title').textContent = job.name;
+  const active = job.items.filter(i => !i.done);
+  const done = job.items.filter(i => i.done);
+  const aEl = document.getElementById('kit-items-active');
+  if (!active.length) {
+    aEl.innerHTML = `<div class="empty">No kit items yet. Add what you need for this job.</div>`;
+  } else {
+    aEl.innerHTML = active.map(i => renderKitItemRow(i, false)).join('');
+  }
+  const doneWrap = document.getElementById('kit-items-completed-section');
+  if (done.length) {
+    doneWrap.style.display = 'block';
+    document.getElementById('kit-items-done-count').textContent = done.length + ' collected';
+    document.getElementById('kit-items-done-header').classList.toggle('collapsed', kitDoneCollapsed);
+    document.getElementById('kit-items-done-list').style.display = kitDoneCollapsed ? 'none' : 'block';
+    document.getElementById('kit-items-done-list').innerHTML = done.map(i => renderKitItemRow(i, true)).join('');
+  } else {
+    doneWrap.style.display = 'none';
+  }
+}
+
+function renderKitItemRow(it, isDone) {
+  const qtyPill = it.qty > 1 ? `<span class="pill" style="margin-right:8px;">×${it.qty}</span>` : '';
+  return `
+    <div class="todo-row${isDone ? ' done' : ''}" onclick="toggleKitItem('${it.id}')">
+      <div class="todo-check"></div>
+      <div class="todo-text">${qtyPill}${escapeHtml(it.text)}</div>
+      <button class="todo-edit" onclick="startEditKitItem('${it.id}', event)" title="Edit">✎</button>
+      <button class="todo-del" onclick="deleteKitItem('${it.id}', event)">×</button>
+    </div>`;
+}
+
+function addKitJob() {
+  const inp = document.getElementById('kit-job-input');
+  const name = inp.value.trim();
+  if (!name) return;
+  const job = { id: id(), name, notes: '', created: new Date().toISOString(), items: [] };
+  state.kitJobs = state.kitJobs || [];
+  state.kitJobs.unshift(job);
+  inp.value = '';
+  save();
+  activeKitJobId = job.id;
+  renderKit();
+}
+
+function openKitJob(jid) {
+  activeKitJobId = jid;
+  renderKit();
+}
+
+function backToKitJobs() {
+  activeKitJobId = null;
+  renderKit();
+}
+
+function renameKitJob() {
+  const job = (state.kitJobs || []).find(j => j.id === activeKitJobId);
+  if (!job) return;
+  const next = prompt('Rename job:', job.name);
+  if (next == null) return;
+  const trimmed = next.trim();
+  if (!trimmed) return;
+  job.name = trimmed;
+  save();
+  renderKit();
+}
+
+function deleteKitJob() {
+  const job = (state.kitJobs || []).find(j => j.id === activeKitJobId);
+  if (!job) return;
+  if (!confirm(`Delete "${job.name}" and all its kit items?`)) return;
+  state.kitJobs = state.kitJobs.filter(j => j.id !== activeKitJobId);
+  activeKitJobId = null;
+  save();
+  renderKit();
+}
+
+function addKitItem() {
+  const job = (state.kitJobs || []).find(j => j.id === activeKitJobId);
+  if (!job) return;
+  const inp = document.getElementById('kit-item-input');
+  const qtyInp = document.getElementById('kit-item-qty');
+  const text = inp.value.trim();
+  if (!text) return;
+  const qty = Math.max(1, parseInt(qtyInp.value, 10) || 1);
+  job.items.unshift({
+    id: id(), text, qty, done: false, created: new Date().toISOString()
+  });
+  inp.value = '';
+  qtyInp.value = 1;
+  save();
+  renderKit();
+}
+
+function toggleKitItem(iid) {
+  const job = (state.kitJobs || []).find(j => j.id === activeKitJobId);
+  if (!job) return;
+  const it = job.items.find(x => x.id === iid);
+  if (!it) return;
+  it.done = !it.done;
+  if (it.done) it.completedAt = new Date().toISOString();
+  save();
+  renderKit();
+}
+
+function deleteKitItem(iid, ev) {
+  ev.stopPropagation();
+  const job = (state.kitJobs || []).find(j => j.id === activeKitJobId);
+  if (!job) return;
+  job.items = job.items.filter(x => x.id !== iid);
+  save();
+  renderKit();
+}
+
+function startEditKitItem(iid, ev) {
+  ev.stopPropagation();
+  const job = (state.kitJobs || []).find(j => j.id === activeKitJobId);
+  if (!job) return;
+  const it = job.items.find(x => x.id === iid);
+  if (!it) return;
+  const row = ev.target.closest('.todo-row');
+  const textEl = row && row.querySelector('.todo-text');
+  if (!textEl) return;
+  const next = prompt('Edit item (prefix with "N× " to change qty, e.g. "4× camera")', `${it.qty > 1 ? it.qty + '× ' : ''}${it.text}`);
+  if (next == null) return;
+  const m = next.trim().match(/^(\d+)\s*[x×]\s*(.+)$/i);
+  if (m) { it.qty = Math.max(1, parseInt(m[1], 10)); it.text = m[2].trim(); }
+  else { it.text = next.trim(); }
+  if (!it.text) return;
+  save();
+  renderKit();
+}
+
+function toggleKitDoneCollapse() {
+  kitDoneCollapsed = !kitDoneCollapsed;
+  renderKit();
+}
+
+// Enter in kit inputs
+(function() {
+  const jobInp = document.getElementById('kit-job-input');
+  if (jobInp) jobInp.addEventListener('keydown', e => { if (e.key === 'Enter') addKitJob(); });
+  const itemInp = document.getElementById('kit-item-input');
+  if (itemInp) itemInp.addEventListener('keydown', e => { if (e.key === 'Enter') addKitItem(); });
+})();
 
 // Tab + chip wiring
 (function() {
