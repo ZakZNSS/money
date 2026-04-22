@@ -1080,9 +1080,18 @@ nav button:hover { color: var(--text); }
 
   <!-- ============ TODOS VIEW ============ -->
   <div class="view" id="view-todos">
+    <div class="tabs" id="todo-tabs">
+      <button class="active" data-cat="personal">👤 Personal</button>
+      <button data-cat="znss">🎥 ZNSS</button>
+      <button data-cat="training">🏋️ Training</button>
+    </div>
+    <div class="chip-row" id="todo-znss-modes" style="display:none">
+      <button class="chip active" data-mode="ideas">💡 Ideas</button>
+      <button class="chip" data-mode="kit">📦 Kit List</button>
+    </div>
     <div class="todo-quick">
       <input id="todo-input" placeholder="Add a task..." autocomplete="off">
-      <button onclick="addTodo()">Add</button>
+      <button id="todo-add-btn" onclick="addTodo()">Add</button>
     </div>
     <div id="todo-active"></div>
     <div id="todo-completed-section" style="display:none">
@@ -1255,6 +1264,14 @@ function migrate(s) {
     s.owed.forEach(o => { if (!o.category) o.category = 'Personal'; });
     s.seedVersion = 2;
   }
+  // v2 -> v3: tag todos with category (defaults to personal)
+  if (s.seedVersion < 3) {
+    s.todos.forEach(t => {
+      if (!t.category) t.category = 'personal';
+      if (t.kit == null) t.kit = false;
+    });
+    s.seedVersion = 3;
+  }
   return s;
 }
 
@@ -1274,7 +1291,7 @@ function seed() {
     networth: [],
     receipts: [],
     lastResetMonth: todayMonth(),
-    seedVersion: 2,
+    seedVersion: 3,
     settings: { paydayDay: 28, weekendShift: true },
     onboarded: false
   };
@@ -2105,11 +2122,50 @@ function formatDate(iso) {
 
 // ============ TODOS ============
 let doneCollapsed = true;
+let todoTab = 'personal';      // personal | znss | training
+let znssMode = 'ideas';        // ideas | kit (only meaningful when todoTab === 'znss')
+
+const todoPlaceholders = {
+  personal: 'Add a personal task...',
+  training: 'Training Hub idea or task...',
+  znss_ideas: 'ZNSS idea or task...',
+  znss_kit:   'Kit item (e.g. 4MP turret, 8ch NVR, 305m CAT6)...'
+};
+const todoEmpty = {
+  personal: 'Nothing personal on your list. Nice.',
+  training: 'No Training Hub ideas yet. Capture one.',
+  znss_ideas: 'No ZNSS ideas yet. Drop one in.',
+  znss_kit:   'Kit list is empty. Add gear you need for the next job.'
+};
+
+function currentTodoKey() {
+  return todoTab === 'znss' ? 'znss_' + znssMode : todoTab;
+}
+
+function filteredTodos() {
+  return state.todos.filter(t => {
+    const cat = t.category || 'personal';
+    if (cat !== todoTab) return false;
+    if (todoTab === 'znss') {
+      const isKit = !!t.kit;
+      return znssMode === 'kit' ? isKit : !isKit;
+    }
+    return true;
+  });
+}
+
 function addTodo() {
   const inp = document.getElementById('todo-input');
   const text = inp.value.trim();
   if (!text) return;
-  state.todos.unshift({ id: id(), text, done: false, created: new Date().toISOString() });
+  state.todos.unshift({
+    id: id(),
+    text,
+    done: false,
+    category: todoTab,
+    kit: todoTab === 'znss' && znssMode === 'kit',
+    created: new Date().toISOString()
+  });
   inp.value = '';
   save();
   renderTodos();
@@ -2170,19 +2226,23 @@ function toggleDoneCollapse() {
   document.getElementById('todo-done-list').style.display = doneCollapsed ? 'none' : 'block';
 }
 function renderTodos() {
-  const active = state.todos.filter(t => !t.done);
-  const done = state.todos.filter(t => t.done);
+  // sync placeholder, ZNSS sub-chip visibility, button label
+  const key = currentTodoKey();
+  const inp = document.getElementById('todo-input');
+  if (inp) inp.placeholder = todoPlaceholders[key];
+  const addBtn = document.getElementById('todo-add-btn');
+  if (addBtn) addBtn.textContent = key === 'znss_kit' ? '+ Kit' : 'Add';
+  const znssChips = document.getElementById('todo-znss-modes');
+  if (znssChips) znssChips.style.display = todoTab === 'znss' ? 'flex' : 'none';
+
+  const scoped = filteredTodos();
+  const active = scoped.filter(t => !t.done);
+  const done = scoped.filter(t => t.done);
   const aEl = document.getElementById('todo-active');
   if (!active.length) {
-    aEl.innerHTML = `<div class="empty">Nothing on your list. Nice.</div>`;
+    aEl.innerHTML = `<div class="empty">${todoEmpty[key]}</div>`;
   } else {
-    aEl.innerHTML = active.map(t => `
-      <div class="todo-row" onclick="toggleTodo('${t.id}')">
-        <div class="todo-check"></div>
-        <div class="todo-text">${escapeHtml(t.text)}</div>
-        <button class="todo-edit" onclick="startEditTodo('${t.id}', event)" title="Edit">✎</button>
-        <button class="todo-del" onclick="deleteTodo('${t.id}', event)">×</button>
-      </div>`).join('');
+    aEl.innerHTML = active.map(t => renderTodoRow(t, false)).join('');
   }
   const doneWrap = document.getElementById('todo-completed-section');
   if (done.length) {
@@ -2190,17 +2250,41 @@ function renderTodos() {
     document.getElementById('todo-done-count').textContent = done.length + ' done';
     document.getElementById('todo-done-header').classList.toggle('collapsed', doneCollapsed);
     document.getElementById('todo-done-list').style.display = doneCollapsed ? 'none' : 'block';
-    document.getElementById('todo-done-list').innerHTML = done.map(t => `
-      <div class="todo-row done" onclick="toggleTodo('${t.id}')">
-        <div class="todo-check"></div>
-        <div class="todo-text">${escapeHtml(t.text)}</div>
-        <button class="todo-edit" onclick="startEditTodo('${t.id}', event)" title="Edit">✎</button>
-        <button class="todo-del" onclick="deleteTodo('${t.id}', event)">×</button>
-      </div>`).join('');
+    document.getElementById('todo-done-list').innerHTML = done.map(t => renderTodoRow(t, true)).join('');
   } else {
     doneWrap.style.display = 'none';
   }
 }
+
+function renderTodoRow(t, isDone) {
+  return `
+    <div class="todo-row${isDone ? ' done' : ''}" onclick="toggleTodo('${t.id}')">
+      <div class="todo-check"></div>
+      <div class="todo-text">${escapeHtml(t.text)}</div>
+      <button class="todo-edit" onclick="startEditTodo('${t.id}', event)" title="Edit">✎</button>
+      <button class="todo-del" onclick="deleteTodo('${t.id}', event)">×</button>
+    </div>`;
+}
+
+// Tab + chip wiring
+(function() {
+  document.querySelectorAll('#todo-tabs button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#todo-tabs button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      todoTab = btn.dataset.cat;
+      renderTodos();
+    });
+  });
+  document.querySelectorAll('#todo-znss-modes .chip').forEach(c => {
+    c.addEventListener('click', () => {
+      document.querySelectorAll('#todo-znss-modes .chip').forEach(x => x.classList.remove('active'));
+      c.classList.add('active');
+      znssMode = c.dataset.mode;
+      renderTodos();
+    });
+  });
+})();
 
 // Enter to add todo
 (function() {
