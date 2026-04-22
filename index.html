@@ -2518,6 +2518,8 @@ function addKitItem() {
   qtyInp.value = 1;
   save();
   renderKit();
+  // keep keyboard open for rapid entry
+  inp.focus();
 }
 
 function toggleKitItem(iid) {
@@ -2567,9 +2569,13 @@ function toggleKitDoneCollapse() {
 // Enter in kit inputs
 (function() {
   const jobInp = document.getElementById('kit-job-input');
-  if (jobInp) jobInp.addEventListener('keydown', e => { if (e.key === 'Enter') addKitJob(); });
+  if (jobInp) jobInp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); addKitJob(); }
+  });
   const itemInp = document.getElementById('kit-item-input');
-  if (itemInp) itemInp.addEventListener('keydown', e => { if (e.key === 'Enter') addKitItem(); });
+  if (itemInp) itemInp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); addKitItem(); }
+  });
 })();
 
 // Tab + chip wiring
