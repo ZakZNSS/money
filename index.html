@@ -756,6 +756,19 @@ nav button:hover { color: var(--text); }
   color: var(--text-faint);
   text-decoration: line-through;
 }
+.todo-cat-badge {
+  flex-shrink: 0;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: 4px;
+  white-space: nowrap;
+}
+.todo-row.done .todo-cat-badge { opacity: 0.5; }
 .todo-del, .todo-edit {
   background: none;
   border: none;
@@ -1082,7 +1095,8 @@ nav button:hover { color: var(--text); }
   <div class="view" id="view-todos">
     <div style="display:flex;align-items:center;gap:8px;">
       <div class="tabs" id="todo-tabs" style="flex:1;margin-bottom:14px;">
-        <button class="active" data-cat="personal"></button>
+        <button class="active" data-cat="all"></button>
+        <button data-cat="personal"></button>
         <button data-cat="work"></button>
         <button data-cat="project"></button>
       </div>
@@ -1096,6 +1110,7 @@ nav button:hover { color: var(--text); }
     <!-- Standard todo list (used for Personal, Project, Work/Ideas) -->
     <div id="todo-standard">
       <div class="todo-quick">
+        <select id="todo-cat-select" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:0 8px;font-size:14px;font-family:inherit;flex:0 0 auto;"></select>
         <input id="todo-input" placeholder="Add a task..." autocomplete="off">
         <button id="todo-add-btn" onclick="addTodo()">Add</button>
       </div>
@@ -2225,10 +2240,11 @@ function formatDate(iso) {
 
 // ============ TODOS ============
 let doneCollapsed = true;
-let todoTab = 'personal';      // personal | work | project
+let todoTab = 'all';           // all | personal | work | project
 let workMode = 'ideas';        // ideas | kit (only meaningful when todoTab === 'work')
 
 const todoDefaults = {
+  all:      '📋 All',
   personal: '👤 Personal',
   work:     '💼 Work',
   project:  '🎯 Project',
@@ -2244,6 +2260,7 @@ function todoLabel(key) {
 function filteredTodos() {
   return state.todos.filter(t => {
     const cat = t.category || 'personal';
+    if (todoTab === 'all') return !t.kit;
     if (cat !== todoTab) return false;
     if (todoTab === 'work') {
       const isKit = !!t.kit;
@@ -2257,12 +2274,19 @@ function addTodo() {
   const inp = document.getElementById('todo-input');
   const text = inp.value.trim();
   if (!text) return;
+  let cat = todoTab;
+  let isKit = todoTab === 'work' && workMode === 'kit';
+  if (todoTab === 'all') {
+    const sel = document.getElementById('todo-cat-select');
+    cat = (sel && sel.value) || 'personal';
+    isKit = false;
+  }
   state.todos.unshift({
     id: id(),
     text,
     done: false,
-    category: todoTab,
-    kit: todoTab === 'work' && workMode === 'kit',
+    category: cat,
+    kit: isKit,
     created: new Date().toISOString()
   });
   inp.value = '';
@@ -2341,21 +2365,36 @@ function renderTodos() {
 
   if (isKit) { renderKit(); return; }
 
+  // category picker (only on All tab)
+  const catSel = document.getElementById('todo-cat-select');
+  if (catSel) {
+    if (todoTab === 'all') {
+      const cats = ['personal', 'work', 'project'];
+      const prev = catSel.value || 'personal';
+      catSel.innerHTML = cats.map(c => `<option value="${c}">${escapeHtml(todoLabel(c))}</option>`).join('');
+      catSel.value = cats.includes(prev) ? prev : 'personal';
+      catSel.style.display = '';
+    } else {
+      catSel.style.display = 'none';
+    }
+  }
+
   // standard list mode
   const inp = document.getElementById('todo-input');
   const plain = s => s.replace(/^\p{Extended_Pictographic}+\s*/u, '');
-  if (inp) inp.placeholder = `Add to ${plain(todoLabel(todoTab))}...`;
+  if (inp) inp.placeholder = todoTab === 'all' ? 'Add a task...' : `Add to ${plain(todoLabel(todoTab))}...`;
   const addBtn = document.getElementById('todo-add-btn');
   if (addBtn) addBtn.textContent = 'Add';
 
+  const showBadge = todoTab === 'all';
   const scoped = filteredTodos();
   const active = scoped.filter(t => !t.done);
   const done = scoped.filter(t => t.done);
   const aEl = document.getElementById('todo-active');
   if (!active.length) {
-    aEl.innerHTML = `<div class="empty">Nothing in ${todoLabel(todoTab)} yet.</div>`;
+    aEl.innerHTML = `<div class="empty">${todoTab === 'all' ? 'No tasks yet.' : 'Nothing in ' + todoLabel(todoTab) + ' yet.'}</div>`;
   } else {
-    aEl.innerHTML = active.map(t => renderTodoRow(t, false)).join('');
+    aEl.innerHTML = active.map(t => renderTodoRow(t, false, showBadge)).join('');
   }
   const doneWrap = document.getElementById('todo-completed-section');
   if (done.length) {
@@ -2363,17 +2402,20 @@ function renderTodos() {
     document.getElementById('todo-done-count').textContent = done.length + ' done';
     document.getElementById('todo-done-header').classList.toggle('collapsed', doneCollapsed);
     document.getElementById('todo-done-list').style.display = doneCollapsed ? 'none' : 'block';
-    document.getElementById('todo-done-list').innerHTML = done.map(t => renderTodoRow(t, true)).join('');
+    document.getElementById('todo-done-list').innerHTML = done.map(t => renderTodoRow(t, true, showBadge)).join('');
   } else {
     doneWrap.style.display = 'none';
   }
 }
 
-function renderTodoRow(t, isDone) {
+function renderTodoRow(t, isDone, showBadge) {
+  const cat = t.category || 'personal';
+  const badge = showBadge ? `<span class="todo-cat-badge">${escapeHtml(todoLabel(cat))}</span>` : '';
   return `
     <div class="todo-row${isDone ? ' done' : ''}" onclick="toggleTodo('${t.id}')">
       <div class="todo-check"></div>
       <div class="todo-text">${escapeHtml(t.text)}</div>
+      ${badge}
       <button class="todo-edit" onclick="startEditTodo('${t.id}', event)" title="Edit">✎</button>
       <button class="todo-del" onclick="deleteTodo('${t.id}', event)">×</button>
     </div>`;
