@@ -757,7 +757,7 @@ nav button:hover { color: var(--text); }
   text-decoration: line-through;
 }
 .todo-cat-badge {
-  flex-shrink: 0;
+  display: inline-block;
   background: var(--bg-2);
   border: 1px solid var(--border);
   color: var(--text-dim);
@@ -765,10 +765,71 @@ nav button:hover { color: var(--text); }
   border-radius: 999px;
   font-size: 11px;
   font-weight: 600;
-  margin-left: 4px;
   white-space: nowrap;
 }
-.todo-row.done .todo-cat-badge { opacity: 0.5; }
+.todo-card.done .todo-cat-badge { opacity: 0.5; }
+
+/* Box-style todo card (with optional notes) */
+.todo-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.todo-card:hover { background: var(--card-hover); }
+.todo-card .todo-check { margin-top: 2px; }
+.todo-card.done .todo-check {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.todo-card.done .todo-check::after {
+  content: '✓';
+  color: white;
+  font-size: 13px;
+  font-weight: 700;
+}
+.todo-body { flex: 1; min-width: 0; }
+.todo-card .todo-text { font-size: 15px; line-height: 1.3; }
+.todo-card.done .todo-text {
+  color: var(--text-faint);
+  text-decoration: line-through;
+}
+.todo-notes {
+  margin-top: 5px;
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+.todo-card.done .todo-notes { color: var(--text-faint); }
+.todo-card-meta {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.todo-card .todo-edit {
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 8px;
+  flex-shrink: 0;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+.todo-card:hover .todo-edit { opacity: 1; }
+@media (hover: none) {
+  .todo-card .todo-edit { opacity: 0.7; }
+}
 .todo-del, .todo-edit {
   background: none;
   border: none;
@@ -1093,18 +1154,15 @@ nav button:hover { color: var(--text); }
 
   <!-- ============ TODOS VIEW ============ -->
   <div class="view" id="view-todos">
-    <div style="display:flex;align-items:center;gap:8px;">
-      <div class="tabs" id="todo-tabs" style="flex:1;margin-bottom:14px;">
-        <button class="active" data-cat="all"></button>
-        <button data-cat="personal"></button>
-        <button data-cat="work"></button>
-        <button data-cat="project"></button>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+      <div class="chip-row" id="todo-cat-chips" style="flex:1;margin:0;padding:0;">
+        <button class="chip active" data-cat="all"></button>
+        <button class="chip" data-cat="personal"></button>
+        <button class="chip" data-cat="work"></button>
+        <button class="chip" data-cat="project"></button>
+        <button class="chip" data-cat="kit"></button>
       </div>
-      <button class="action" onclick="openModal('todoLabels')" title="Rename tabs" style="margin-bottom:14px;padding:8px 10px;">✎</button>
-    </div>
-    <div class="chip-row" id="todo-work-modes" style="display:none">
-      <button class="chip active" data-mode="ideas"></button>
-      <button class="chip" data-mode="kit"></button>
+      <button class="action" onclick="openModal('todoLabels')" title="Rename categories" style="padding:7px 12px;flex-shrink:0;background:var(--card);border:1px solid var(--border);border-radius:999px;color:var(--text-dim);cursor:pointer;font-size:13px;">✎</button>
     </div>
 
     <!-- Standard todo list (used for Personal, Project, Work/Ideas) -->
@@ -2012,19 +2070,32 @@ function buildModalForm(kind, item) {
         <button class="btn-primary" onclick="savePayday()">Save</button>
       </div>`,
 
+    todo: `
+      <h3>${editing?'Edit':'New'} Task</h3>
+      <label>Title</label>
+      <input id="f-todo-text" value="${escapeAttr(item.text)}">
+      <label>Category</label>
+      <select id="f-todo-cat">
+        ${['personal','work','project'].map(c => `<option value="${c}" ${(item.category||'personal')===c?'selected':''}>${escapeHtml(todoLabel(c))}</option>`).join('')}
+      </select>
+      <label>Notes</label>
+      <textarea id="f-todo-notes" rows="4" placeholder="Optional details, links, sub-steps...">${escapeHtml(item.notes||'')}</textarea>
+      <div class="btn-row">
+        ${editing?`<button class="btn-danger" onclick="deleteTodoFromModal('${item.id}')">Delete</button>`:''}
+        <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+        <button class="btn-primary" onclick="saveTodo('${item.id||''}')">Save</button>
+      </div>`,
+
     todoLabels: `
-      <h3>Rename Todo Tabs</h3>
-      <p style="color:var(--text-dim);font-size:13px;margin:-6px 0 10px;">Customise tab names. Leave blank to reset to default.</p>
-      <label>Tab 1 (default: ${todoDefaults.personal})</label>
+      <h3>Rename Categories</h3>
+      <p style="color:var(--text-dim);font-size:13px;margin:-6px 0 10px;">Customise category names. Leave blank to reset to default.</p>
+      <label>${todoDefaults.personal} (default)</label>
       <input id="f-lbl-personal" placeholder="${todoDefaults.personal}" value="${escapeAttr((state.todoLabels||{}).personal||'')}">
-      <label>Tab 2 (default: ${todoDefaults.work})</label>
+      <label>${todoDefaults.work} (default)</label>
       <input id="f-lbl-work" placeholder="${todoDefaults.work}" value="${escapeAttr((state.todoLabels||{}).work||'')}">
-      <label>Tab 3 (default: ${todoDefaults.project})</label>
+      <label>${todoDefaults.project} (default)</label>
       <input id="f-lbl-project" placeholder="${todoDefaults.project}" value="${escapeAttr((state.todoLabels||{}).project||'')}">
-      <label style="margin-top:10px;color:var(--text-dim);font-size:12px;text-transform:uppercase;letter-spacing:0.08em;">Tab 2 sub-modes</label>
-      <label>Ideas chip (default: ${todoDefaults.ideas})</label>
-      <input id="f-lbl-ideas" placeholder="${todoDefaults.ideas}" value="${escapeAttr((state.todoLabels||{}).ideas||'')}">
-      <label>Shopping chip (default: ${todoDefaults.kit})</label>
+      <label>${todoDefaults.kit} (default)</label>
       <input id="f-lbl-kit" placeholder="${todoDefaults.kit}" value="${escapeAttr((state.todoLabels||{}).kit||'')}">
       <div class="btn-row">
         <button class="btn-secondary" onclick="closeModal()">Cancel</button>
@@ -2043,7 +2114,7 @@ function savePayday() {
 
 function saveTodoLabels() {
   state.todoLabels = state.todoLabels || {};
-  ['personal','work','project','ideas','kit'].forEach(k => {
+  ['personal','work','project','kit'].forEach(k => {
     const val = v('f-lbl-' + k);
     if (val) state.todoLabels[k] = val;
     else delete state.todoLabels[k];
@@ -2240,8 +2311,7 @@ function formatDate(iso) {
 
 // ============ TODOS ============
 let doneCollapsed = true;
-let todoTab = 'all';           // all | personal | work | project
-let workMode = 'ideas';        // ideas | kit (only meaningful when todoTab === 'work')
+let todoTab = 'all';           // all | personal | work | project | kit
 
 const todoDefaults = {
   all:      '📋 All',
@@ -2259,14 +2329,9 @@ function todoLabel(key) {
 
 function filteredTodos() {
   return state.todos.filter(t => {
-    const cat = t.category || 'personal';
-    if (todoTab === 'all') return !t.kit;
-    if (cat !== todoTab) return false;
-    if (todoTab === 'work') {
-      const isKit = !!t.kit;
-      return workMode === 'kit' ? isKit : !isKit;
-    }
-    return true;
+    if (t.kit) return false;
+    if (todoTab === 'all') return true;
+    return (t.category || 'personal') === todoTab;
   });
 }
 
@@ -2274,19 +2339,19 @@ function addTodo() {
   const inp = document.getElementById('todo-input');
   const text = inp.value.trim();
   if (!text) return;
-  let cat = todoTab;
-  let isKit = todoTab === 'work' && workMode === 'kit';
-  if (todoTab === 'all') {
+  let cat;
+  if (todoTab === 'all' || todoTab === 'kit') {
     const sel = document.getElementById('todo-cat-select');
     cat = (sel && sel.value) || 'personal';
-    isKit = false;
+  } else {
+    cat = todoTab;
   }
   state.todos.unshift({
     id: id(),
     text,
     done: false,
     category: cat,
-    kit: isKit,
+    notes: '',
     created: new Date().toISOString()
   });
   inp.value = '';
@@ -2301,47 +2366,37 @@ function toggleTodo(tid) {
   save();
   renderTodos();
 }
-function deleteTodo(tid, ev) {
-  ev.stopPropagation();
-  state.todos = state.todos.filter(x => x.id !== tid);
+function saveTodo(tid) {
+  const text = v('f-todo-text');
+  if (!text) return alert('Title required');
+  const cat = document.getElementById('f-todo-cat').value || 'personal';
+  const notes = document.getElementById('f-todo-notes').value.trim();
+  if (tid) {
+    const t = state.todos.find(x => x.id === tid);
+    if (!t) return;
+    t.text = text;
+    t.category = cat;
+    t.notes = notes;
+  } else {
+    state.todos.unshift({
+      id: id(),
+      text,
+      done: false,
+      category: cat,
+      notes,
+      created: new Date().toISOString()
+    });
+  }
   save();
+  closeModal();
   renderTodos();
 }
-function startEditTodo(tid, ev) {
-  ev.stopPropagation();
-  const row = ev.target.closest('.todo-row');
-  const textEl = row && row.querySelector('.todo-text');
-  const t = state.todos.find(x => x.id === tid);
-  if (!t || !textEl) return;
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.className = 'todo-edit-input';
-  input.value = t.text;
-  input.addEventListener('click', e => e.stopPropagation());
-  let finished = false;
-  const commit = () => {
-    if (finished) return;
-    finished = true;
-    const newText = input.value.trim();
-    if (newText && newText !== t.text) {
-      t.text = newText;
-      save();
-    }
-    renderTodos();
-  };
-  const cancel = () => {
-    if (finished) return;
-    finished = true;
-    renderTodos();
-  };
-  input.addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); commit(); }
-    else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
-  });
-  input.addEventListener('blur', commit);
-  textEl.replaceWith(input);
-  input.focus();
-  input.select();
+function deleteTodoFromModal(tid) {
+  if (!confirm('Delete this task?')) return;
+  state.todos = state.todos.filter(x => x.id !== tid);
+  save();
+  closeModal();
+  renderTodos();
 }
 function toggleDoneCollapse() {
   doneCollapsed = !doneCollapsed;
@@ -2349,17 +2404,13 @@ function toggleDoneCollapse() {
   document.getElementById('todo-done-list').style.display = doneCollapsed ? 'none' : 'block';
 }
 function renderTodos() {
-  // paint tab labels from state.todoLabels overrides
-  document.querySelectorAll('#todo-tabs button').forEach(b => {
+  // paint chip labels + active state from state.todoLabels overrides
+  document.querySelectorAll('#todo-cat-chips .chip').forEach(b => {
     b.textContent = todoLabel(b.dataset.cat);
+    b.classList.toggle('active', b.dataset.cat === todoTab);
   });
-  document.querySelectorAll('#todo-work-modes .chip').forEach(c => {
-    c.textContent = todoLabel(c.dataset.mode);
-  });
-  const workChips = document.getElementById('todo-work-modes');
-  if (workChips) workChips.style.display = todoTab === 'work' ? 'flex' : 'none';
 
-  const isKit = todoTab === 'work' && workMode === 'kit';
+  const isKit = todoTab === 'kit';
   document.getElementById('todo-standard').style.display = isKit ? 'none' : 'block';
   document.getElementById('kit-view').style.display = isKit ? 'block' : 'none';
 
@@ -2379,7 +2430,7 @@ function renderTodos() {
     }
   }
 
-  // standard list mode
+  // input placeholder
   const inp = document.getElementById('todo-input');
   const plain = s => s.replace(/^\p{Extended_Pictographic}+\s*/u, '');
   if (inp) inp.placeholder = todoTab === 'all' ? 'Add a task...' : `Add to ${plain(todoLabel(todoTab))}...`;
@@ -2392,7 +2443,7 @@ function renderTodos() {
   const done = scoped.filter(t => t.done);
   const aEl = document.getElementById('todo-active');
   if (!active.length) {
-    aEl.innerHTML = `<div class="empty">${todoTab === 'all' ? 'No tasks yet.' : 'Nothing in ' + todoLabel(todoTab) + ' yet.'}</div>`;
+    aEl.innerHTML = `<div class="empty">${todoTab === 'all' ? 'No tasks yet. Add one above.' : 'Nothing in ' + todoLabel(todoTab) + ' yet.'}</div>`;
   } else {
     aEl.innerHTML = active.map(t => renderTodoRow(t, false, showBadge)).join('');
   }
@@ -2410,15 +2461,25 @@ function renderTodos() {
 
 function renderTodoRow(t, isDone, showBadge) {
   const cat = t.category || 'personal';
+  const notes = t.notes ? `<div class="todo-notes">${escapeHtml(t.notes)}</div>` : '';
   const badge = showBadge ? `<span class="todo-cat-badge">${escapeHtml(todoLabel(cat))}</span>` : '';
+  const meta = badge ? `<div class="todo-card-meta">${badge}</div>` : '';
   return `
-    <div class="todo-row${isDone ? ' done' : ''}" onclick="toggleTodo('${t.id}')">
+    <div class="todo-card${isDone ? ' done' : ''}" onclick="toggleTodo('${t.id}')">
       <div class="todo-check"></div>
-      <div class="todo-text">${escapeHtml(t.text)}</div>
-      ${badge}
-      <button class="todo-edit" onclick="startEditTodo('${t.id}', event)" title="Edit">✎</button>
-      <button class="todo-del" onclick="deleteTodo('${t.id}', event)">×</button>
+      <div class="todo-body">
+        <div class="todo-text">${escapeHtml(t.text)}</div>
+        ${notes}
+        ${meta}
+      </div>
+      <button class="todo-edit" onclick="editTodo('${t.id}', event)" title="Edit">✎</button>
     </div>`;
+}
+
+function editTodo(tid, ev) {
+  if (ev) ev.stopPropagation();
+  const t = state.todos.find(x => x.id === tid);
+  if (t) openModal('todo', t);
 }
 
 // ============ KIT JOBS ============
@@ -2620,21 +2681,11 @@ function toggleKitDoneCollapse() {
   });
 })();
 
-// Tab + chip wiring
+// Category chip wiring
 (function() {
-  document.querySelectorAll('#todo-tabs button').forEach(btn => {
+  document.querySelectorAll('#todo-cat-chips .chip').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('#todo-tabs button').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
       todoTab = btn.dataset.cat;
-      renderTodos();
-    });
-  });
-  document.querySelectorAll('#todo-work-modes .chip').forEach(c => {
-    c.addEventListener('click', () => {
-      document.querySelectorAll('#todo-work-modes .chip').forEach(x => x.classList.remove('active'));
-      c.classList.add('active');
-      workMode = c.dataset.mode;
       renderTodos();
     });
   });
